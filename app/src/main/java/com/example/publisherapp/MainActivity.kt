@@ -15,6 +15,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.example.publisherapp.Models.LocationData
+import com.google.gson.Gson
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5Client
 import java.util.UUID
@@ -23,6 +25,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var locationManager: LocationManager
     private var mqttClient: Mqtt5BlockingClient? = null
     private var isPublishing: Boolean = false
+
+    // Track maximum and minimum speeds
+    private var maxSpeed: Float = 0f
+    private var minSpeed: Float = Float.MAX_VALUE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +85,27 @@ class MainActivity : AppCompatActivity() {
         val locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 val studentId = findViewById<EditText>(R.id.etStudentId).text.toString()
-                val message = "StudentID: $studentId, Lat: ${location.latitude}, Lng: ${location.longitude}"
+
+                // Update min and max speed
+                val currentSpeed = location.speed
+                if (currentSpeed > maxSpeed) maxSpeed = currentSpeed
+                if (currentSpeed < minSpeed) minSpeed = currentSpeed
+
+                // Create a LocationData object with max and min speeds
+                val locationData = LocationData(
+                    studentId = studentId,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    timestamp = System.currentTimeMillis(),
+                    maxSpeed = maxSpeed,
+                    minSpeed = minSpeed
+                )
+
+                // Convert LocationData to JSON
+                val gson = Gson()
+                val message = gson.toJson(locationData)
+
+                // Publish location as JSON
                 publishLocation(message)
             }
 
@@ -88,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 0f, locationListener)
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 15000, 1f, locationListener)
         } catch (e: SecurityException) {
             Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
         }
