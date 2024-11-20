@@ -19,16 +19,15 @@ import com.example.publisherapp.Models.LocationData
 import com.google.gson.Gson
 import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient
 import com.hivemq.client.mqtt.mqtt5.Mqtt5Client
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     private lateinit var locationManager: LocationManager
     private var mqttClient: Mqtt5BlockingClient? = null
     private var isPublishing: Boolean = false
-
-    // Track maximum and minimum speeds
-    private var maxSpeed: Float = 0f
-    private var minSpeed: Float = Float.MAX_VALUE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,57 +80,6 @@ class MainActivity : AppCompatActivity() {
         requestLocationUpdates()
     }
 
-    private fun requestLocationUpdates() {
-        val locationListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                val studentId = findViewById<EditText>(R.id.etStudentId).text.toString()
-
-                // Update min and max speed
-                val currentSpeed = location.speed
-                if (currentSpeed > maxSpeed) maxSpeed = currentSpeed
-                if (currentSpeed < minSpeed) minSpeed = currentSpeed
-
-                // Create a LocationData object with max and min speeds
-                val locationData = LocationData(
-                    studentId = studentId,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    timestamp = System.currentTimeMillis(),
-                    maxSpeed = maxSpeed,
-                    minSpeed = minSpeed
-                )
-
-                // Convert LocationData to JSON
-                val gson = Gson()
-                val message = gson.toJson(locationData)
-
-                // Publish location as JSON
-                publishLocation(message)
-            }
-
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
-        }
-
-        try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 15000, 1f, locationListener)
-        } catch (e: SecurityException) {
-            Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun publishLocation(message: String) {
-        try {
-            mqttClient?.publishWith()
-                ?.topic("assignment/location")
-                ?.payload(message.toByteArray())
-                ?.send()
-            Log.d("MQTT", "Published: $message")
-        } catch (e: Exception) {
-            Toast.makeText(this, "Failed to publish location data", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private fun stopPublishing() {
         if (!isPublishing) return
         isPublishing = false
@@ -153,9 +101,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestLocationUpdates() {
+        val locationListener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                val studentId = findViewById<EditText>(R.id.etStudentId).text.toString()
+
+                // Create a LocationData object with max and min speeds
+                val locationData = LocationData(
+                    studentId = studentId,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    timestamp = getCurrentTimestamp(),
+                    speed = location.speed
+                )
+
+                // Convert LocationData to JSON
+                val gson = Gson()
+                val message = gson.toJson(locationData)
+
+                // Publish location as JSON
+                publishLocation(message)
+            }
+
+            override fun onProviderEnabled(provider: String) {}
+            override fun onProviderDisabled(provider: String) {}
+        }
+
+        try {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 1f, locationListener)
+        } catch (e: SecurityException) {
+            Toast.makeText(this, "Location permission not granted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun publishLocation(message: String) {
+        try {
+            mqttClient?.publishWith()
+                ?.topic("assignment/location")
+                ?.payload(message.toByteArray())
+                ?.send()
+            Log.d("MQTT", "Published: $message")
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to publish location data", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun checkLocationPermission() {
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
         }
+    }
+
+    private fun getCurrentTimestamp(): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        return dateFormat.format(Date()) // Format the current date and time
     }
 }
